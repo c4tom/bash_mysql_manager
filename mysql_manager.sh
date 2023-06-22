@@ -239,8 +239,8 @@ obter_bancos_dados() {
         resultado=$($MYSQL_CMD "SELECT DISTINCT Db FROM mysql.db WHERE User = '$1' AND Host = '$2';")
     
     else
-         mysql_echo $MYSQL_CMD "\"SELECT DISTINCT Db FROM mysql.db\""
-        resultado=$($MYSQL_CMD "SELECT DISTINCT Db FROM mysql.db")   
+        mysql_echo $MYSQL_CMD "SHOW DATABASES"
+        resultado=$($MYSQL_CMD "SHOW DATABASES")   
     fi
 
     # Ler o resultado e armazenar os bancos de dados

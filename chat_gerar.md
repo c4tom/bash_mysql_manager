@@ -33,7 +33,7 @@ gerar um exemplo de um script bash com as seguintes caracteristicas
   - Se DB_SELECTED for vazio, solicite conforme a logica do item 2, e depois solicite o texto a ser pesquisado
 
 
-# Globalmente você tera no script
+# Globalmente, o script terá
 - funcao que imprima os comandos executados, se tiver modo debug TRUE
 
 use as variaveis globais
@@ -50,12 +50,10 @@ BACKUP_DIR=/dados/backup
 
 ECHO_CMD=false # se for true, todos os comandos deve ser impresso na tela e depois executado
 
-DB_CHECK_ITEMS=FOR UPGRADE, QUICK , FAST , MEDIUM , EXTENDED , CHANGED
-DB_CHECK_SUM=QUICK , EXTENDED
-DB_REPAIR=QUICK , EXTENDED , USE_FRM
-
 DB_SELECTED= # sera usado para memorizar o banco de dados selecionado
 
 
-- use e gere a funcao generate_password() com 2 parametros, 1) tamanho da senha 2) LUNS (L=lower case, U=uppercase, N=numero, S=caracteres especiais)
+- A funcao generate_password() deve ter 2 parametros:
+  1) tamanho da senha 
+  2) LUNS (L=lower case, U=uppercase, N=numero, S=caracteres especiais)
 
