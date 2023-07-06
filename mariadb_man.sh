@@ -244,7 +244,7 @@ mysql_cmd() {
 }
 
 # funcão que executa o ultimo menu
-last() {
+last_menu() {
     eval $LAST_MENU;
 }
 
@@ -253,6 +253,26 @@ color_rand() {
     local colors=(verde amarelo violeta rosa azul laranja cinza)
     echo ${colors[$RANDOM % ${#colors[@]}]}
 }
+
+
+test_mysql_connection() {
+    mysql_cmd
+
+    local result=$($MYSQL_CMD -e "SELECT 1;" 2>&1)
+    
+    if [[ -e $ARQUIVO_INI ]]; then
+        echoColor "Arquivo $(realpath "$ARQUIVO_INI") existe." amarelo
+    else
+        echoColor "Arquivo $ARQUIVO_INI não existe." vermelho
+    fi
+    
+    if [[ $result == *"ERROR"* ]]; then
+        echoColor "Não foi possível conectar ao MySQL. Verifique suas credenciais e certifique-se de que o servidor esteja em execução." vermelho
+    else
+        echoColor "Conexão com o MySQL estabelecida com sucesso." verde
+    fi
+}
+
 
 
 # funcão que vai imprimir a cor do texto
@@ -379,7 +399,7 @@ colorize_sql() {
 }
 
 # Função para imprimir o menu colorizado randomicamente
-print_random_color() {
+print_random_color_for_menu() {
     local menu=("$@")
     local colors=("\033[31m" "\033[32m" "\033[33m" "\033[34m" "\033[35m" "\033[36m" "\033[37m" "\033[38m")
     local num_colors=${#colors[@]}
@@ -655,6 +675,7 @@ user_get_all_privileges() {
     show_menu_user_management
 }
 
+######### Gerencia de Banco de Dados #########
 
 db_get_all_databases() {
     # Executa a consulta SQL para obter a lista de bancos de dados
@@ -665,10 +686,37 @@ db_get_all_databases() {
 }
 
 db_create_database() {
-    local db_name=$1
-    $MYSQL_CMD -s -N -e "CREATE DATABASE IF NOT EXISTS $db_name;"
-    echo "Database '$db_name' criado com sucesso"
+    echo "Digite o nome do banco de dados:"
+    read -r nome_banco_dados
+
+    # Verificar se o nome do banco de dados é válido
+    if [[ -z "$nome_banco_dados" ]]; then
+        echo "Nome do banco de dados inválido. Saindo..."
+        pause
+        show_menu_database_management
+        return
+    fi
+
+    # Verificar se o banco de dados já existe
+    local query="SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = '$nome_banco_dados'"
+    local resultado=$($MYSQL_CMD -e "$query" -s -N)
+
+    if [[ -n "$resultado" ]]; then
+        echo "O banco de dados '$nome_banco_dados' já existe. Saindo..."
+        pause
+        show_menu_database_management
+        return
+    fi
+
+    # Criar o banco de dados
+    query="CREATE DATABASE $nome_banco_dados"
+    $MYSQL_CMD -e "$query"
+
+    echo "Database '$nome_banco_dados' criado com sucesso"
+    pause
+    show_menu_database_management
 }
+
 
 db_drop_database() {
     local db_name=$1
@@ -775,10 +823,37 @@ db_alter_privileges() {
     # Você pode adicionar aqui as etapas adicionais para configurar os privilégios, etc.
 }
 
+# Função para exibir as propriedades de um banco de dados selecionado
+db_database_properties() {
+    local query="SELECT * FROM information_schema.SCHEMATA"
+    clear
+    $MYSQL_CMD -e "$query"
+    pause
+    show_menu_database_management
+}
+
+db_list_without_users_privileges() {
+    # Consulta SQL para obter a lista de bancos de dados sem privilégios para usuários
+    local query="
+        SELECT DISTINCT db.SCHEMA_NAME
+        FROM information_schema.SCHEMATA AS db
+        LEFT JOIN (
+            SELECT Db
+            FROM mysql.db
+            WHERE User != 'root'
+        ) AS priv_users ON db.SCHEMA_NAME = priv_users.Db
+        WHERE db.SCHEMA_NAME NOT IN ('mysql', 'information_schema', 'performance_schema', 'sys')
+            AND priv_users.Db IS NULL;
+    "
+
+    # Executa o comando MySQL e retorna a lista de bancos de dados sem privilégios para usuários
+    $MYSQL_CMD -e "$query" -N
+    pause
+    show_menu_database_management
+}
 
 
-
-######## Tabelas e Databases ############
+######## Tabelas ############
 
 tb_get_all_tables() {
     local database_name=$1
@@ -874,17 +949,54 @@ show_menu_database() {
     menu_main
 }
 
-# Função para exibir as propriedades de um banco de dados selecionado
-show_menu_database_properties() {
-    local database_name="$1"
-    local query="SELECT * FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='$database_name';"
-    local resultado=$(MYSQL_CMD -e "$query")
-    if [[ $? -eq 0 ]]; then
-        echo "$resultado"
-    else
-        echo "Erro ao exibir as propriedades do banco de dados '$database_name'."
-    fi
+show_menu_database_management() {
+    clear
+    flash_message
+    echo "=== Gerenciamento de Banco de Dados ==="
+    local menu=(
+        "Listar todos os bancos de dados"
+        "Criar Banco de Dados"
+        "Deletar Banco de Dados"
+        "Listar propriedades de todos os bancos de dados"
+        "Listar Banco de dados que não tenha usuarios com privilégios"
+        "Voltar"
+    )
+    print_random_color_for_menu "${menu[@]}"
+
+    read -p "Escolha uma opção: " option
+    case $option in
+        1)
+            local databases=($(db_get_all_databases))
+            echo "Lista de bancos de dados:"
+            for ((i=0; i<"${#databases[@]}"; i++)); do
+                echo "$((i+1)). ${databases[$i]}"
+            done
+            pause
+            show_menu_database_management
+            ;;
+        2)
+            db_create_database
+            ;;
+        3)
+            db_drop_database
+            ;;
+        4)
+            db_database_properties
+            ;;
+        5)
+            db_list_without_users_privileges
+            ;;
+        6)
+            menu_main
+            ;;
+        *)
+            add_flash "Opção inválida"
+            show_menu_database_management
+            ;;
+    esac
 }
+
+
 
 
 # Função para exibir o menu de gerenciamento de tabelas
@@ -908,7 +1020,7 @@ show_menu_table_management() {
         "Voltar"
     )
 
-    print_random_color_menu "${menu[@]}"  
+    print_random_color_for_menu "${menu[@]}"  
 
     read -p "Escolha uma opção: " option
     case $option in
@@ -1065,7 +1177,7 @@ show_menu_user_management() {
     "Alterar privilégios?"
     "Voltar")
 
-    print_random_color_menu "${menu[@]}"
+    print_random_color_for_menu "${menu[@]}"
 
     read -p "Escolha uma opção: " option
     case $option in
@@ -1098,6 +1210,8 @@ show_menu_user_management() {
         ;;
     esac
 }
+
+######## Funcoes para Backup e Outros ###########
 
 # Função para fazer backup físico
 backup_perform_physical() {
@@ -1141,23 +1255,19 @@ mysql_prompt() {
 dashboard() {
     clear
     echoColor "=== Informações do Banco de Dados ===" violeta
-    $MYSQL_CMD -e "SELECT VERSION() AS 'Versão do Banco de Dados', USER() AS 'Usuário Conectado'" -s
+    $MYSQL_CMD -e "SELECT VERSION() AS 'Versão do Banco de Dados', USER() AS 'Usuário Conectado'"
 
     echoColor "=== Lista de Databases e Tamanhos em Disco ===" violeta
-    local query="SELECT table_schema AS 'Database', SUM(data_length + index_length) / 1024 / 1024 AS 'Tamanho (MB)' FROM information_schema.tables GROUP BY table_schema"
-    $MYSQL_CMD -e "$query" -s
+    local query="SELECT table_schema AS 'Database', ROUND(SUM(data_length + index_length) / 1024 / 1024, 2) AS 'Tamanho (MB)' FROM information_schema.tables GROUP BY table_schema"
+    $MYSQL_CMD -e "$query"
 
     echoColor "=== Lista de Usuários e Databases ===" violeta
     local query="SELECT DISTINCT user, GROUP_CONCAT(DISTINCT db ORDER BY db SEPARATOR ', ') AS 'Databases' FROM mysql.db GROUP BY user"
-    $MYSQL_CMD -e "$query" -s
+    $MYSQL_CMD -e "$query"
 
     pause
     menu_main
 }
-
-
-
-#!/bin/bash
 
 # Função para imprimir a mensagem de copyright
 print_copyright() {
@@ -1188,8 +1298,8 @@ menu_main() {
 
     local menu=(
         "Dashboard" # 1
-        "Selecionar Banco de Dados para ficar na memoria" # 2
-        "Propriedades do Banco de Dados" #3
+        "Selecionar Banco de Dados (ficara na memoria)" # 2
+        "Gerenciamento de Databases" # 3
         "Gerenciamento das Tabelas do DB: [$DB_SELECTED]" #4
         "Backup / Restauração" # 5
         "Status e Monitoramento" # 6
@@ -1198,7 +1308,7 @@ menu_main() {
         "Replicação" #9
         "Sair" #10
     )
-    print_random_color_menu "${menu[@]}"
+    print_random_color_for_menu "${menu[@]}"
 
     read -p "Escolha uma opção: " option
     case $option in
@@ -1209,7 +1319,7 @@ menu_main() {
         show_menu_database
         ;;
     3)
-        show_menu_database_properties
+        show_menu_database_management
         ;;
     4)
         show_menu_table_management
@@ -1242,6 +1352,7 @@ menu_main() {
 }
 
 mysql_cmd
+test_mysql_connection
 #print_copyright
 #check_dependencies
 #pause
